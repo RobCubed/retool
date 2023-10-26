@@ -19,10 +19,10 @@ proc `or`*(x, y: ImGuiInputTextFlags): ImGuiInputTextFlags =
 var window: GLFWWindow
 var clipboardText: string = ""
 
-# regex, case insnsitive, regex object, replacement, error
+# regex, case insensitive, regex object, replacement, error
 var reBuffers = newSeq[(cstring, bool, Regex, cstring, bool)]()
 var reOutputBuffer = ""
-var redraw = false
+var redraw = true
 
 proc processText(): string =
   result = clipboardText
@@ -58,8 +58,7 @@ proc compileRe(data: ptr ImGuiInputTextCallbackData): int32 {.cdecl, varargs.} =
     reBuffers[index][2] = nil
     reBuffers[index][4] = true
     return
-  copyMem(reBuffers[index][0][0].addr, incoming[0].addr, incoming.len)
-  
+  copyMem(reBuffers[index][0][0].addr, incoming[0].addr, incoming.len) 
   try:
     reBuffers[index][2] = re(incoming, flags)
     reBuffers[index][4] = false
@@ -81,7 +80,21 @@ proc addBuffer(regexStr: string, replacement: string, sensitive: bool) =
   var b2 = cast[cstring](create(char, 2049))
   copyMem(b1[0].addr, regexStr[0].addr, regexStr.len)
   copyMem(b2[0].addr, replacement[0].addr, replacement.len)
-  reBuffers.add((b1, sensitive, nil, b2, false))
+
+  var flags: set[RegexFlag]
+  if sensitive:
+    flags = flags + {RegexFlag.reIgnoreCase}
+  var reg: Regex = nil
+  var error = false
+
+  try:
+    reg = re(regexStr, flags)
+    error = false
+  except:
+    reg = nil
+    error = true
+
+  reBuffers.add((b1, sensitive, reg, b2, error))
 
 proc MainWindow() =
   defer:
@@ -93,6 +106,8 @@ proc MainWindow() =
     if clipboardText.len == 0:
       quit()
     reOutputBuffer = clipboardText
+    redraw = true
+    echo clipboardText
   if reBuffers.len == 0:
     reBuffers.add((newString(2048).cstring, true, nil, newString(2048).cstring, false))
   igSetNextWindowPos(zeroPos)
